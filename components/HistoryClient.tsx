@@ -66,24 +66,27 @@ export function HistoryClient({ workouts, waterLogs, sleepLogs }: Props) {
       {tab === "workouts" && (
         <div className="flex flex-col gap-2">
           {workouts.length === 0 && <p className="text-sm text-slate-400">No workouts logged yet.</p>}
-          {workouts.map((w) => (
-            <Link
-              key={w.id}
-              href={`/workout/${w.id}`}
-              className="card flex items-center justify-between transition-colors hover:border-slate-300 dark:hover:border-slate-700"
-            >
-              <div>
-                <p className="text-sm font-medium">
-                  Workout {w.workoutType} {w.phaseLabel ? `— ${w.phaseLabel}` : ""}
-                </p>
-                <p className="text-xs text-slate-500">
-                  {fmtDate(w.date)} · {w.exercises.length} exercises
-                  {w.programDay ? ` · Day ${w.programDay}` : ""}
-                </p>
-              </div>
-              <span className="text-slate-400">→</span>
-            </Link>
-          ))}
+          {workouts.map((w) => {
+            const roundsLogged = new Set(w.exercises.map((e) => e.round)).size;
+            return (
+              <Link
+                key={w.id}
+                href={`/workout/${w.id}`}
+                className="card flex items-center justify-between transition-colors hover:border-slate-300 dark:hover:border-slate-700"
+              >
+                <div>
+                  <p className="text-sm font-medium">
+                    Workout {w.workoutType} {w.phaseLabel ? `— ${w.phaseLabel}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {fmtDate(w.date)} · {roundsLogged}/{w.rounds} round{w.rounds === 1 ? "" : "s"} logged
+                    {w.programDay ? ` · Day ${w.programDay}` : ""}
+                  </p>
+                </div>
+                <span className="text-slate-400">→</span>
+              </Link>
+            );
+          })}
         </div>
       )}
 

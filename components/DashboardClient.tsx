@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Settings, WaterLog, SleepLog, WorkoutLog, Exercise } from "@prisma/client";
+import type { DayPlan } from "@/lib/program";
 import {
   Bar,
   BarChart,
@@ -28,8 +29,15 @@ interface Props {
   todayWaterMl: number;
   todaySleep: SleepLog | null;
   programInfo: { elapsedDays: number; dayInCycle: number; cycleNumber: number; phase: { label: string; guidance?: string } };
-  suggestedType: "A" | "B";
+  weeklyPlan: DayPlan;
 }
+
+const PLAN_COPY: Record<DayPlan["type"], string> = {
+  A: "Workout A",
+  B: "Workout B",
+  REST: "Rest day",
+  MOBILITY: "Mobility day",
+};
 
 export function DashboardClient({
   settings,
@@ -39,7 +47,7 @@ export function DashboardClient({
   todayWaterMl,
   todaySleep,
   programInfo,
-  suggestedType,
+  weeklyPlan,
 }: Props) {
   const router = useRouter();
   const [waterGoal, setWaterGoal] = useState(settings.waterGoalMl);
@@ -70,7 +78,8 @@ export function DashboardClient({
     return [...recentWorkouts]
       .reverse()
       .map((w) => {
-        const pushups = w.exercises.find((e) => e.name === "Push-ups");
+        // Round 1's Push-ups as the representative value for the trend line.
+        const pushups = w.exercises.find((e) => e.name === "Push-ups" && e.round === 1);
         const reps = firstNumber(pushups?.actualReps) ?? firstNumber(pushups?.targetReps);
         return {
           day: shortLabel(dayKey(w.date)),
@@ -171,7 +180,7 @@ export function DashboardClient({
           <p className="text-lg font-semibold">
             {settings.programStartDate ? (
               <>
-                Day {programInfo.dayInCycle} of {70} — {programInfo.phase.label}
+                Day {programInfo.dayInCycle} of 70 — {programInfo.phase.label}
                 {programInfo.cycleNumber > 1 ? ` (cycle ${programInfo.cycleNumber})` : ""}
               </>
             ) : (
@@ -183,10 +192,20 @@ export function DashboardClient({
               {programInfo.phase.guidance}
             </p>
           )}
+          {settings.programStartDate && (
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              Today ({weeklyPlan.weekday}) — <span className="font-medium">{PLAN_COPY[weeklyPlan.type]}</span>
+            </p>
+          )}
         </div>
         {settings.programStartDate ? (
-          <Link href={`/workout/new?type=${suggestedType}`} className="btn-primary">
-            Log Workout {suggestedType} →
+          <Link
+            href={weeklyPlan.type === "A" || weeklyPlan.type === "B" ? `/workout/new?type=${weeklyPlan.type}` : "/workout/new"}
+            className="btn-primary"
+          >
+            {weeklyPlan.type === "A" || weeklyPlan.type === "B"
+              ? `Log ${PLAN_COPY[weeklyPlan.type]} →`
+              : "Log a workout anyway →"}
           </Link>
         ) : (
           <button className="btn-primary" onClick={startProgramToday} disabled={busy}>

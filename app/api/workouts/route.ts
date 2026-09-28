@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const workouts = await prisma.workoutLog.findMany({
     orderBy: { date: "desc" },
     take: limit,
-    include: { exercises: { orderBy: { order: "asc" } } },
+    include: { exercises: { orderBy: [{ round: "asc" }, { order: "asc" }] } },
   });
   return NextResponse.json(workouts);
 }
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         })),
       },
     },
-    include: { exercises: { orderBy: { order: "asc" } } },
+    include: { exercises: { orderBy: [{ round: "asc" }, { order: "asc" }] } },
   });
   return NextResponse.json(workout, { status: 201 });
 }

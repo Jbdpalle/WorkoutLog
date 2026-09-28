@@ -26,6 +26,8 @@ export interface Phase {
   dayStart: number;
   dayEnd: number;
   rounds: string;
+  /** Sensible default for the "how many rounds" picker on the log-workout form — always editable. */
+  roundsDefault: number;
   tempo?: string;
   targets?: Record<ExerciseKey, string>;
   guidance?: string;
@@ -40,6 +42,7 @@ export const PHASES: Phase[] = [
     dayStart: 1,
     dayEnd: 10,
     rounds: "2 rounds",
+    roundsDefault: 2,
     targets: {
       rope: "60 sec",
       burpees: "5",
@@ -57,6 +60,7 @@ export const PHASES: Phase[] = [
     dayStart: 11,
     dayEnd: 20,
     rounds: "2 rounds",
+    roundsDefault: 2,
     targets: {
       rope: "75 sec",
       burpees: "7",
@@ -74,6 +78,7 @@ export const PHASES: Phase[] = [
     dayStart: 21,
     dayEnd: 30,
     rounds: "2 rounds",
+    roundsDefault: 2,
     targets: {
       rope: "90 sec",
       burpees: "9",
@@ -91,6 +96,7 @@ export const PHASES: Phase[] = [
     dayStart: 31,
     dayEnd: 40,
     rounds: "1–2 rounds (by feel)",
+    roundsDefault: 2,
     guidance:
       "Drop volume ~25–35%. Use this period to improve mobility, technique, sleep, recovery, movement quality. Finish hungry to train, not exhausted.",
     targets: {
@@ -110,6 +116,7 @@ export const PHASES: Phase[] = [
     dayStart: 41,
     dayEnd: 50,
     rounds: "2 rounds",
+    roundsDefault: 2,
     tempo:
       "Push-ups & goblet squats: 3 sec down → 1 sec pause → up. Reverse lunge: 2–3 sec down → drive up.",
     targets: {
@@ -129,6 +136,7 @@ export const PHASES: Phase[] = [
     dayStart: 51,
     dayEnd: 60,
     rounds: "2 rounds",
+    roundsDefault: 2,
     targets: {
       rope: "2 min",
       burpees: "10",
@@ -146,6 +154,7 @@ export const PHASES: Phase[] = [
     dayStart: 61,
     dayEnd: 70,
     rounds: "1–2 rounds (by feel)",
+    roundsDefault: 2,
     guidance:
       "Reduce volume ~30–40%. Don't stop moving — rope, mobility, easy bodyweight, light kettlebell work, technique. No exact numbers given in your notes for this block; use judgement and the Phase 5 numbers as a ceiling.",
   },
@@ -236,6 +245,64 @@ export function getWorkoutTemplate(
   ];
 }
 
-export function suggestNextWorkoutType(lastType: string | null): "A" | "B" {
-  return lastType === "A" ? "B" : "A";
+/**
+ * "The Three Workout Days" / "Your Weekly Rotation" from your notes:
+ *   Week 1 — Mon A, Tue rest, Wed B, Thu rest, Fri A, Sat mobility, Sun rest
+ *   Week 2 — Mon B, Tue rest, Wed A, Thu rest, Fri B, Sat mobility, Sun rest
+ * then repeat, alternating every week. Independent of the 70-day phase
+ * cycle above — this is just which of A/B/rest/mobility today is.
+ */
+export type DayPlanType = "A" | "B" | "REST" | "MOBILITY";
+
+export interface DayPlan {
+  weekday: string;
+  type: DayPlanType;
+}
+
+const WEEK_A: DayPlanType[] = ["A", "REST", "B", "REST", "A", "MOBILITY", "REST"]; // Mon..Sun
+const WEEK_B: DayPlanType[] = ["B", "REST", "A", "REST", "B", "MOBILITY", "REST"]; // Mon..Sun
+
+const WEEKDAY_NAMES = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
+
+function mondayOf(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  const isoWeekday = x.getDay() === 0 ? 7 : x.getDay(); // Mon=1..Sun=7
+  x.setDate(x.getDate() - (isoWeekday - 1));
+  return x;
+}
+
+/**
+ * Today's plan. Week parity is measured in calendar weeks (Mon-Sun) elapsed
+ * since the Monday of the week the program started in — so "Week 1" is
+ * always the week you started, matching the notes' own Week 1 / Week 2
+ * example, regardless of which weekday you happened to start on.
+ */
+export function getWeeklyPlan(
+  programStartDate: Date | string | null,
+  referenceDate: Date = new Date()
+): DayPlan {
+  const ref = new Date(referenceDate);
+  const isoWeekday = ref.getDay() === 0 ? 7 : ref.getDay(); // Mon=1..Sun=7
+  const weekday = WEEKDAY_NAMES[isoWeekday - 1];
+
+  if (!programStartDate) {
+    return { weekday, type: WEEK_A[isoWeekday - 1] };
+  }
+
+  const startMonday = mondayOf(new Date(programStartDate));
+  const refMonday = mondayOf(ref);
+  const weeksElapsed = Math.round(
+    (refMonday.getTime() - startMonday.getTime()) / (7 * 86_400_000)
+  );
+  const pattern = Math.abs(weeksElapsed) % 2 === 0 ? WEEK_A : WEEK_B;
+  return { weekday, type: pattern[isoWeekday - 1] };
 }

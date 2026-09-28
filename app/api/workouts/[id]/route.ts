@@ -7,29 +7,16 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const { id } = await params;
   const workout = await prisma.workoutLog.findUnique({
     where: { id },
-    include: { exercises: { orderBy: { order: "asc" } } },
+    include: { exercises: { orderBy: [{ round: "asc" }, { order: "asc" }] } },
   });
   if (!workout) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json(workout);
 }
 
+/** Updates workout-level fields (date, notes, duration, planned round count). Round contents are saved via /rounds. */
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
   const { id } = await params;
   const body = await req.json();
-
-  if (Array.isArray(body.exercises)) {
-    await Promise.all(
-      body.exercises.map((e: any) =>
-        prisma.exercise.update({
-          where: { id: e.id },
-          data: {
-            ...(e.actualReps !== undefined ? { actualReps: e.actualReps } : {}),
-            ...(e.targetReps !== undefined ? { targetReps: e.targetReps } : {}),
-          },
-        })
-      )
-    );
-  }
 
   const workout = await prisma.workoutLog.update({
     where: { id },
@@ -39,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       ...(body.date !== undefined ? { date: new Date(body.date) } : {}),
       ...(body.rounds !== undefined ? { rounds: Number(body.rounds) } : {}),
     },
-    include: { exercises: { orderBy: { order: "asc" } } },
+    include: { exercises: { orderBy: [{ round: "asc" }, { order: "asc" }] } },
   });
   return NextResponse.json(workout);
 }

@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
-import { getProgramDay, suggestNextWorkoutType } from "@/lib/program";
+import { getProgramDay, getWeeklyPlan } from "@/lib/program";
 import { DashboardClient } from "@/components/DashboardClient";
+
+// This page reads live data straight from the database on every request —
+// without this, Next.js prerenders it once at build time and every visit
+// would show whatever the database looked like when `next build` ran.
+export const dynamic = "force-dynamic";
 
 async function getSettings() {
   const existing = await prisma.settings.findUnique({ where: { id: 1 } });
@@ -33,7 +38,7 @@ export default async function DashboardPage() {
     prisma.workoutLog.findMany({
       orderBy: { date: "desc" },
       take: 10,
-      include: { exercises: { orderBy: { order: "asc" } } },
+      include: { exercises: { orderBy: [{ round: "asc" }, { order: "asc" }] } },
     }),
   ]);
 
@@ -47,8 +52,7 @@ export default async function DashboardPage() {
   );
 
   const programInfo = getProgramDay(settings.programStartDate, new Date());
-  const lastWorkoutType = recentWorkouts[0]?.workoutType ?? null;
-  const suggestedType = suggestNextWorkoutType(lastWorkoutType);
+  const weeklyPlan = getWeeklyPlan(settings.programStartDate, new Date());
 
   return (
     <DashboardClient
@@ -59,7 +63,7 @@ export default async function DashboardPage() {
       todayWaterMl={todayWaterMl}
       todaySleep={todaySleep ?? null}
       programInfo={programInfo}
-      suggestedType={suggestedType}
+      weeklyPlan={weeklyPlan}
     />
   );
 }

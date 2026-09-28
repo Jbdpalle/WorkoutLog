@@ -4,8 +4,13 @@ export function startOfDay(d: Date | string): Date {
   return x;
 }
 
+/** YYYY-MM-DD in local time (not UTC — avoids day-shifting for timezones east of UTC). */
 export function dayKey(d: Date | string): string {
-  return startOfDay(d).toISOString().slice(0, 10);
+  const x = startOfDay(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const day = String(x.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function shortLabel(dateKey: string): string {

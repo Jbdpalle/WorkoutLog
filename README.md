@@ -4,14 +4,17 @@ A simple, editable dashboard for tracking water intake, sleep, and workouts —
 built around "The Progressive Full-Body System" (kettlebell + bodyweight +
 skipping rope, 3 sessions/week).
 
-- **Dashboard** — today's water/sleep quick-log, editable daily goals, and
+- **Dashboard** — today's water/sleep quick-log, editable daily goals,
   progress charts (water & sleep last 14 days, push-up trend across recent
-  workouts).
+  workouts), and today's plan straight from your notes' weekly rotation
+  (e.g. "Today (Wednesday) — Workout B", or a rest/mobility day).
 - **Log a workout** — pick Workout A (Strength), Workout B (Athletic), or a
-  Minimum Day; the form pre-fills target reps for your current phase of the
-  program and you fill in what you actually did.
+  Minimum Day, set the date and number of rounds, then log **each round
+  separately** — round 1's actual reps don't have to match round 2's, and
+  you can come back and edit either one independently at any time.
 - **History** — browse every past workout, water, and sleep entry; click any
-  workout to see its full exercise breakdown, edit it, or delete it.
+  workout to see its full round-by-round breakdown, edit any round, or
+  delete the whole entry.
 
 ## Stack & why
 
@@ -88,12 +91,12 @@ turso db tokens create workoutlog       # → TURSO_AUTH_TOKEN
 
 **2. Apply the schema** to that new (empty) database — Turso/libSQL don't
 support `prisma migrate deploy` directly yet, so the recommended path is to
-run the SQL Prisma already generated for you at
-`prisma/migrations/20260928152642_init/migration.sql` straight through the
+run the SQL Prisma already generated for you, in order, straight through the
 Turso CLI:
 
 ```bash
 turso db shell workoutlog < prisma/migrations/20260928152642_init/migration.sql
+turso db shell workoutlog < prisma/migrations/20260928154640_add_exercise_rounds/migration.sql
 ```
 
 **3. Deploy to Vercel:**
@@ -135,6 +138,27 @@ guessed:
    just "reduce volume ~30–40%, do rope/mobility/easy bodyweight/light KB
    work." The app shows that guidance instead of inventing numbers; the
    workout form will just show blank/"by feel" targets during that block.
+3. The **weekly A/B/rest schedule** (Mon A, Tue rest, Wed B, Thu rest, Fri A,
+   Sat mobility, Sun rest — alternating A/B every week) is a separate,
+   calendar-based rhythm from the 70-day phase cycle above. "Week 1" is
+   always the calendar week (Mon–Sun) you hit **Start program today** in, so
+   the alternation is anchored to your actual start date, not just any
+   Monday. Verified against your notes' own Week 1 / Week 2 example for two
+   full weeks before pushing this.
+
+## A bug I found and fixed while building the rounds feature
+
+The Dashboard and History pages were being **statically prerendered at
+build time** (a Next.js default when a page has no dynamic APIs) instead of
+rendering fresh on every request. In production mode, that meant both pages
+would keep showing whatever the database looked like at the moment you ran
+`npm run build` — not your actual logged data. I caught this while
+smoke-testing the round-saving flow (a saved workout wasn't showing up on
+History) and fixed it by adding `export const dynamic = "force-dynamic"` to
+`app/page.tsx` and `app/history/page.tsx`, then re-verified both pages
+reflect live writes immediately. Worth knowing in case you add other pages
+later that read from the database — they need the same line, or Next.js
+will silently freeze them at build time.
 
 ## Known low-risk dependency note
 

@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { ExerciseTemplate, WorkoutType } from "@/lib/program";
+import type { DayPlan, WorkoutType } from "@/lib/program";
+import { dayKey } from "@/lib/dates";
 
 interface Props {
-  templates: Record<WorkoutType, ExerciseTemplate[]>;
   defaultType: WorkoutType;
+  defaultRounds: number;
   phaseLabel: string;
   programDay: number;
-  rounds: string;
+  weeklyPlan: DayPlan;
 }
 
 const TYPE_LABELS: Record<WorkoutType, string> = {
@@ -18,18 +19,22 @@ const TYPE_LABELS: Record<WorkoutType, string> = {
   MIN: "Minimum Day",
 };
 
-export function NewWorkoutForm({ templates, defaultType, phaseLabel, programDay, rounds }: Props) {
+const PLAN_COPY: Record<DayPlan["type"], string> = {
+  A: "Workout A",
+  B: "Workout B",
+  REST: "a rest day",
+  MOBILITY: "a mobility day",
+};
+
+export function NewWorkoutForm({ defaultType, defaultRounds, phaseLabel, programDay, weeklyPlan }: Props) {
   const router = useRouter();
   const [type, setType] = useState<WorkoutType>(defaultType);
-  const [actuals, setActuals] = useState<Record<string, string>>({});
-  const [notes, setNotes] = useState("");
-  const [durationMin, setDurationMin] = useState("");
+  const [date, setDate] = useState(dayKey(new Date()));
+  const [rounds, setRounds] = useState(defaultRounds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const exercises = templates[type];
-
-  async function submit() {
+  async function start() {
     setSaving(true);
     setError(null);
     try {
@@ -40,19 +45,13 @@ export function NewWorkoutForm({ templates, defaultType, phaseLabel, programDay,
           workoutType: type,
           phaseLabel: type === "MIN" ? "Minimum Day" : phaseLabel,
           programDay,
-          rounds: 2,
-          durationMin: durationMin ? Number(durationMin) : null,
-          notes: notes || null,
-          exercises: exercises.map((e) => ({
-            name: e.name,
-            targetReps: e.targetReps,
-            actualReps: actuals[e.name] || null,
-          })),
+          rounds: type === "MIN" ? 1 : rounds,
+          date,
         }),
       });
-      if (!res.ok) throw new Error("Failed to save workout");
-      const saved = await res.json();
-      router.push(`/workout/${saved.id}`);
+      if (!res.ok) throw new Error("Failed to start workout");
+      const created = await res.json();
+      router.push(`/workout/${created.id}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -66,65 +65,59 @@ export function NewWorkoutForm({ templates, defaultType, phaseLabel, programDay,
       <div>
         <h1 className="text-xl font-semibold">Log a workout</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {type === "MIN" ? "Minimum Day — 1 round, ~10 min" : `${phaseLabel} · ${rounds}`}
+          Your weekly rotation says {weeklyPlan.weekday} is {PLAN_COPY[weeklyPlan.type]}.
         </p>
       </div>
 
-      <div className="flex gap-2">
-        {(Object.keys(TYPE_LABELS) as WorkoutType[]).map((t) => (
-          <button
-            key={t}
-            className={type === t ? "btn-primary" : "btn-secondary"}
-            onClick={() => setType(t)}
-          >
-            {TYPE_LABELS[t]}
-          </button>
-        ))}
-      </div>
+      <div className="card flex flex-col gap-4">
+        <div>
+          <label className="label">Workout</label>
+          <div className="flex gap-2">
+            {(Object.keys(TYPE_LABELS) as WorkoutType[]).map((t) => (
+              <button
+                key={t}
+                className={type === t ? "btn-primary" : "btn-secondary"}
+                onClick={() => setType(t)}
+              >
+                {TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {type === "MIN" ? "1 round, ~10 min" : `${phaseLabel} · target reps prefilled per round`}
+          </p>
+        </div>
 
-      <div className="card flex flex-col gap-3">
-        {exercises.map((ex) => (
-          <div key={ex.name} className="flex items-center gap-3">
-            <div className="w-40 shrink-0">
-              <p className="text-sm font-medium">{ex.name}</p>
-              <p className="text-xs text-slate-500">target: {ex.targetReps || "—"}</p>
-            </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="label">Date</label>
             <input
+              type="date"
               className="input"
-              placeholder={`e.g. ${ex.targetReps || "done"}`}
-              value={actuals[ex.name] ?? ""}
-              onChange={(e) => setActuals((prev) => ({ ...prev, [ex.name]: e.target.value }))}
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
           </div>
-        ))}
-      </div>
-
-      <div className="card flex flex-col gap-3">
-        <div>
-          <label className="label">Duration (min, optional)</label>
-          <input
-            type="number"
-            className="input"
-            value={durationMin}
-            onChange={(e) => setDurationMin(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label">Notes (optional)</label>
-          <textarea
-            className="input"
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="How did it feel? Anything to remember next time?"
-          />
+          {type !== "MIN" && (
+            <div>
+              <label className="label">Rounds</label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                className="input"
+                value={rounds}
+                onChange={(e) => setRounds(Math.max(1, Number(e.target.value) || 1))}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <button className="btn-primary" onClick={submit} disabled={saving}>
-        {saving ? "Saving…" : "Save workout"}
+      <button className="btn-primary" onClick={start} disabled={saving}>
+        {saving ? "Starting…" : "Start workout"}
       </button>
     </div>
   );

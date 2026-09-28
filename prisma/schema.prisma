@@ -48,6 +48,7 @@ model Exercise {
   id         String     @id @default(cuid())
   workoutId  String
   workout    WorkoutLog @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  round      Int        @default(1)
   name       String
   targetReps String?
   actualReps String?
