@@ -8,6 +8,8 @@ import { dayKey } from "@/lib/dates";
 interface Props {
   defaultType: WorkoutType;
   defaultRounds: number;
+  /** Rounds to fall back to when switching from Minimum Day to A/B (independent of what's currently selected). */
+  phaseRoundsDefault: number;
   phaseLabel: string;
   programDay: number;
   weeklyPlan: DayPlan;
@@ -26,13 +28,27 @@ const PLAN_COPY: Record<DayPlan["type"], string> = {
   MOBILITY: "a mobility day",
 };
 
-export function NewWorkoutForm({ defaultType, defaultRounds, phaseLabel, programDay, weeklyPlan }: Props) {
+export function NewWorkoutForm({
+  defaultType,
+  defaultRounds,
+  phaseRoundsDefault,
+  phaseLabel,
+  programDay,
+  weeklyPlan,
+}: Props) {
   const router = useRouter();
   const [type, setType] = useState<WorkoutType>(defaultType);
   const [date, setDate] = useState(dayKey(new Date()));
   const [rounds, setRounds] = useState(defaultRounds);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function selectType(t: WorkoutType) {
+    setType(t);
+    // Reset to a sensible default when switching — but leave it alone if
+    // they're just re-clicking the type they're already on.
+    if (t !== type) setRounds(t === "MIN" ? 1 : phaseRoundsDefault);
+  }
 
   async function start() {
     setSaving(true);
@@ -45,7 +61,7 @@ export function NewWorkoutForm({ defaultType, defaultRounds, phaseLabel, program
           workoutType: type,
           phaseLabel: type === "MIN" ? "Minimum Day" : phaseLabel,
           programDay,
-          rounds: type === "MIN" ? 1 : rounds,
+          rounds,
           date,
         }),
       });
@@ -77,14 +93,16 @@ export function NewWorkoutForm({ defaultType, defaultRounds, phaseLabel, program
               <button
                 key={t}
                 className={type === t ? "btn-primary" : "btn-secondary"}
-                onClick={() => setType(t)}
+                onClick={() => selectType(t)}
               >
                 {TYPE_LABELS[t]}
               </button>
             ))}
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            {type === "MIN" ? "1 round, ~10 min" : `${phaseLabel} · target reps prefilled per round`}
+            {type === "MIN"
+              ? "Normally 1 round (~10 min) — bump up Rounds below if you want more."
+              : `${phaseLabel} · target reps prefilled per round`}
           </p>
         </div>
 
@@ -98,19 +116,17 @@ export function NewWorkoutForm({ defaultType, defaultRounds, phaseLabel, program
               onChange={(e) => setDate(e.target.value)}
             />
           </div>
-          {type !== "MIN" && (
-            <div>
-              <label className="label">Rounds</label>
-              <input
-                type="number"
-                min={1}
-                max={5}
-                className="input"
-                value={rounds}
-                onChange={(e) => setRounds(Math.max(1, Number(e.target.value) || 1))}
-              />
-            </div>
-          )}
+          <div>
+            <label className="label">Rounds</label>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              className="input"
+              value={rounds}
+              onChange={(e) => setRounds(Math.max(1, Number(e.target.value) || 1))}
+            />
+          </div>
         </div>
       </div>
 

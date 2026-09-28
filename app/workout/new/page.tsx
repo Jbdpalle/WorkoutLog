@@ -23,13 +23,18 @@ export default async function NewWorkoutPage({
   const queryType =
     sp.type === "A" || sp.type === "B" || sp.type === "MIN" ? (sp.type as WorkoutType) : null;
   const planType = weeklyPlan.type === "A" || weeklyPlan.type === "B" ? weeklyPlan.type : null;
-  const defaultType: WorkoutType = queryType ?? planType ?? "MIN";
+  // Minimum Day is for when you're too tired/busy to do a *scheduled* A/B
+  // session — not the default for a rest/mobility day, which just has no
+  // scheduled session at all. So the fallback here is a full workout (A),
+  // not Minimum Day; MIN stays a click away if that's what you actually want.
+  const defaultType: WorkoutType = queryType ?? planType ?? "A";
   const defaultRounds = defaultType === "MIN" ? 1 : programInfo.phase.roundsDefault;
 
   return (
     <NewWorkoutForm
       defaultType={defaultType}
       defaultRounds={defaultRounds}
+      phaseRoundsDefault={programInfo.phase.roundsDefault}
       phaseLabel={programInfo.phase.label}
       programDay={programInfo.dayInCycle}
       weeklyPlan={weeklyPlan}
