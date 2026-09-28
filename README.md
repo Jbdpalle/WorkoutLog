@@ -19,7 +19,10 @@ skipping rope, 3 sessions/week).
   (fast first paint, no client-side data-fetch waterfall) with API routes for
   mutations.
 - **Prisma + SQLite** — a real database, not browser storage, so nothing is
-  lost if you clear your browser. Local file (`prisma/dev.db`), zero setup.
+  lost if you clear your browser. Local file (`prisma/dev.db`) by default,
+  zero setup; swaps to a hosted [Turso](https://turso.tech) database for
+  deployment (see "Deploying for phone access" below) via Prisma's libSQL
+  driver adapter, with no code changes needed either way.
 - **Recharts** — the progress charts.
 - **Tailwind CSS** — styling, no component framework overhead.
 
@@ -66,22 +69,56 @@ sqlite3 prisma/dev.db .dump > backup.sql
 ## Deploying for phone / cross-device access
 
 Right now this runs locally — great for zero lag, but only reachable on the
-machine it's running on. To use it from your phone too, the lowest-effort
-path is:
+machine it's running on. Local SQLite files don't persist on Vercel (or any
+host without a persistent disk), so the app also supports [Turso](https://turso.tech)
+(a free-tier, SQLite-compatible hosted database) via Prisma's libSQL driver
+adapter — the code for this is already in the repo (`lib/prisma.ts`,
+`@prisma/adapter-libsql`) and falls back to the local file automatically
+when `TURSO_DATABASE_URL` isn't set, so local dev is unaffected.
 
-1. Push this repo to GitHub (done).
-2. Deploy to [Vercel](https://vercel.com) (free tier) — it auto-detects
-   Next.js.
-3. Swap the database for one Vercel's serverless functions can reach — local
-   SQLite files don't persist on Vercel. [Turso](https://turso.tech) (free
-   tier, SQLite-compatible) is the smallest change: update
-   `prisma/schema.prisma`'s datasource to use `@prisma/adapter-libsql`, set
-   `DATABASE_URL`/`DATABASE_AUTH_TOKEN` in Vercel's environment variables,
-   and redeploy.
+**1. Create the Turso database** (needs a free account at
+[turso.tech](https://turso.tech) and their CLI):
 
-I didn't do this step myself — it needs your own Vercel/Turso accounts and
-credentials, which I don't have access to. Happy to walk through it or make
-the schema change when you're ready.
+```bash
+turso auth login
+turso db create workoutlog
+turso db show workoutlog --url          # → TURSO_DATABASE_URL
+turso db tokens create workoutlog       # → TURSO_AUTH_TOKEN
+```
+
+**2. Apply the schema** to that new (empty) database — Turso/libSQL don't
+support `prisma migrate deploy` directly yet, so the recommended path is to
+run the SQL Prisma already generated for you at
+`prisma/migrations/20260928152642_init/migration.sql` straight through the
+Turso CLI:
+
+```bash
+turso db shell workoutlog < prisma/migrations/20260928152642_init/migration.sql
+```
+
+**3. Deploy to Vercel:**
+- Import this GitHub repo at [vercel.com/new](https://vercel.com/new) — it
+  auto-detects Next.js.
+- In the project's Environment Variables settings, add `TURSO_DATABASE_URL`
+  and `TURSO_AUTH_TOKEN` from step 1.
+- Deploy. Open the resulting `*.vercel.app` URL on your phone — you can "Add
+  to Home Screen" for an app-like icon.
+
+Any future schema changes: repeat step 2 with the new migration file after
+running `prisma migrate dev` locally.
+
+I didn't run steps 1–3 myself — they need your own Turso/Vercel accounts and
+credentials, which I don't have access to. Everything up to "push the code"
+is done and verified (see below); the rest is a few minutes of clicking
+through those two dashboards.
+
+**What I verified before pushing this:** the libSQL adapter path (read +
+write) against a real local libSQL connection, and confirmed local dev is
+byte-for-byte unaffected by the change (same build output, same response
+times) since it silently falls back to the plain SQLite client when no Turso
+URL is set. I could not verify against an actual Turso-hosted database or a
+live Vercel deploy, since that needs accounts I don't have — worth a quick
+end-to-end check after your first deploy.
 
 ## Notes on the workout program data (`lib/program.ts`)
 

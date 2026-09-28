@@ -12,6 +12,8 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
+    "@libsql/client": "^0.8.1",
+    "@prisma/adapter-libsql": "^5.20.0",
     "@prisma/client": "^5.20.0",
     "date-fns": "^3.6.0",
     "next": "15.5.26",
