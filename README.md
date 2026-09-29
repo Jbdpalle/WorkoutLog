@@ -21,11 +21,11 @@ skipping rope, 3 sessions/week).
 - **Next.js 15 (App Router) + TypeScript** — one app, server-rendered pages
   (fast first paint, no client-side data-fetch waterfall) with API routes for
   mutations.
-- **Prisma + SQLite** — a real database, not browser storage, so nothing is
-  lost if you clear your browser. Local file (`prisma/dev.db`) by default,
-  zero setup; swaps to a hosted [Turso](https://turso.tech) database for
-  deployment (see "Deploying for phone access" below) via Prisma's libSQL
-  driver adapter, with no code changes needed either way.
+- **Prisma + Postgres** — a real database, not browser storage, so nothing
+  is lost if you clear your browser. The same `DATABASE_URL` env var is
+  used for local dev and for the deployed app on Vercel (see "Deploying to
+  Vercel" below) — one free Neon Postgres database (via Vercel's Storage
+  tab) covers both, no separate local database to install.
 - **Recharts** — the progress charts.
 - **Tailwind CSS** — styling, no component framework overhead.
 
@@ -35,10 +35,14 @@ were consistently under 50ms.
 
 ## Running it locally
 
+This needs a Postgres database to point at — see "Deploying to Vercel"
+below for the fastest free option (a Neon database from Vercel's Storage
+tab works equally well for local dev; a local Postgres install works too).
+
 ```bash
 npm install
-cp .env.example .env        # local SQLite, nothing to fill in
-npx prisma migrate dev      # creates prisma/dev.db with the schema
+cp .env.example .env        # fill in DATABASE_URL with your Postgres connection string
+npx prisma migrate dev      # creates the schema in that database
 npm run dev                 # http://localhost:3000
 ```
 
@@ -49,79 +53,107 @@ Day 1, and start logging.
 
 - `npm run build` — production build; verifies types and that every route
   compiles (already run once while building this — passes clean).
-- Manual smoke test performed while building this: created a water entry, a
-  sleep entry, and a full workout via the API, confirmed they showed up on
-  the dashboard/history, edited and deleted a workout, reset the program
-  start date — all round-tripped correctly against the real SQLite database
-  in production mode (`npm run build && npm run start`).
+- Manual smoke test performed while building this, driven through a real
+  browser (Playwright), against a real local Postgres instance: quick-added
+  water and sleep from the dashboard, started a 2-round workout, saved each
+  round independently, confirmed History and the workout detail page both
+  reflected it immediately, then deleted the test entries — all against
+  Postgres in production mode (`npm run build && npm run start`).
 - There's no automated test suite yet (none was requested) — if you want
   regression coverage as this grows, the natural next step is a handful of
-  route-handler tests against a throwaway SQLite file.
+  route-handler tests against a throwaway Postgres database.
 
 ## Your data / backup
 
-Everything lives in `prisma/dev.db`, a single SQLite file, which is
-git-ignored (databases don't belong in git history). To back it up, copy
-that file somewhere safe, or export a portable snapshot of your logged
-history anytime with:
+Everything lives in your Postgres database — nothing is stored in the repo
+or in the browser, so it survives a fresh `git clone` or a cleared browser.
+Back it up anytime with `pg_dump`:
 
 ```bash
-sqlite3 prisma/dev.db .dump > backup.sql
+pg_dump "$DATABASE_URL" > backup.sql
 ```
 
-## Deploying for phone / cross-device access
+Neon (the database provider this README uses via Vercel) may also offer
+built-in backups/point-in-time restore on its free tier — I haven't
+verified current details, so check its dashboard rather than relying only
+on the `pg_dump` above.
+
+## Deploying to Vercel
 
 Right now this runs locally — great for zero lag, but only reachable on the
-machine it's running on. Local SQLite files don't persist on Vercel (or any
-host without a persistent disk), so the app also supports [Turso](https://turso.tech)
-(a free-tier, SQLite-compatible hosted database) via Prisma's libSQL driver
-adapter — the code for this is already in the repo (`lib/prisma.ts`,
-`@prisma/adapter-libsql`) and falls back to the local file automatically
-when `TURSO_DATABASE_URL` isn't set, so local dev is unaffected.
+machine it's running on. The app already speaks plain Postgres (via
+`DATABASE_URL`), which is exactly what Vercel's own Storage tab provisions
+(a Neon Postgres database), so there's no adapter code or separate
+database CLI needed — just a connection string.
 
-**1. Create the Turso database** (needs a free account at
-[turso.tech](https://turso.tech) and their CLI):
+**1. Import the repo:** at [vercel.com/new](https://vercel.com/new), sign
+in and import `Jbdpalle/WorkoutLog` from GitHub. It auto-detects Next.js —
+don't click Deploy yet.
 
-```bash
-turso auth login
-turso db create workoutlog
-turso db show workoutlog --url          # → TURSO_DATABASE_URL
-turso db tokens create workoutlog       # → TURSO_AUTH_TOKEN
-```
+**2. Add a Postgres database:** in the project (before or right after the
+first deploy), open the **Storage** tab → **Create Database** → **Postgres**
+(Neon) → follow its prompts to create one and connect it to this project.
+Vercel sets `DATABASE_URL` (and a couple of related vars) in the project's
+environment variables for you automatically — you shouldn't need to type a
+connection string in by hand.
 
-**2. Apply the schema** to that new (empty) database — Turso/libSQL don't
-support `prisma migrate deploy` directly yet, so the recommended path is to
-run the SQL Prisma already generated for you, in order, straight through the
-Turso CLI:
+**3. Apply the schema** to that new (empty) database. The simplest way:
+copy the `DATABASE_URL` Vercel just created for you (Storage tab → your
+database → `.env.local` tab has it) into your local `.env`, then run:
 
 ```bash
-turso db shell workoutlog < prisma/migrations/20260928152642_init/migration.sql
-turso db shell workoutlog < prisma/migrations/20260928154640_add_exercise_rounds/migration.sql
+npx prisma migrate deploy
 ```
 
-**3. Deploy to Vercel:**
-- Import this GitHub repo at [vercel.com/new](https://vercel.com/new) — it
-  auto-detects Next.js.
-- In the project's Environment Variables settings, add `TURSO_DATABASE_URL`
-  and `TURSO_AUTH_TOKEN` from step 1.
-- Deploy. Open the resulting `*.vercel.app` URL on your phone — you can "Add
-  to Home Screen" for an app-like icon.
+This applies both migrations already in `prisma/migrations/` in order —
+straightforward with Postgres, unlike the SQLite/Turso path this README
+used to describe.
 
-Any future schema changes: repeat step 2 with the new migration file after
-running `prisma migrate dev` locally.
+**4. Deploy:** back in the Vercel project, click **Deploy** (or redeploy if
+it already ran before the database existed). Open the resulting
+`*.vercel.app` URL on your phone — "Add to Home Screen" for an app-like
+icon.
 
-I didn't run steps 1–3 myself — they need your own Turso/Vercel accounts and
-credentials, which I don't have access to. Everything up to "push the code"
-is done and verified (see below); the rest is a few minutes of clicking
-through those two dashboards.
+Any future schema changes: run `npx prisma migrate dev` locally against
+your dev database, then `npx prisma migrate deploy` against the same
+`DATABASE_URL` Vercel uses (or let it run automatically — see the note
+below).
 
-**What I verified before pushing this:** the libSQL adapter path (read +
-write) against a real local libSQL connection, and confirmed local dev is
-byte-for-byte unaffected by the change (same build output, same response
-times) since it silently falls back to the plain SQLite client when no Turso
-URL is set. I could not verify against an actual Turso-hosted database or a
-live Vercel deploy, since that needs accounts I don't have — worth a quick
-end-to-end check after your first deploy.
+**Optional:** to have migrations apply automatically on every deploy
+instead of running step 3 by hand each time, you can change this repo's
+`package.json` build script to run `prisma migrate deploy` before
+`next build`, e.g. `"build": "prisma migrate deploy && next build"`. I
+didn't make that change myself since it affects how every future deploy
+behaves and seemed worth flagging rather than deciding for you — say the
+word and I'll wire it in.
+
+I didn't run steps 1–4 myself — they need your own Vercel account and the
+database it would provision, which I don't have access to. Everything up
+to "push the code" is done and verified (see below); the rest is a few
+minutes of clicking through the Vercel dashboard. If you'd rather I ran the
+deploy directly from here, see "Can I deploy this for you?" below.
+
+**What I verified before pushing this:** built and ran the full app against
+a real local Postgres database (not SQLite) in production mode, then drove
+it through a real browser — quick-logged water and sleep from the
+dashboard, started a 2-round workout, saved each round independently,
+confirmed History and the workout detail page reflected it immediately,
+deleted the test entries. I could not verify against your actual deployed
+Neon/Vercel setup, since that needs accounts I don't have — worth a quick
+click-through after your first deploy.
+
+### Can I deploy this for you?
+
+I can run the Vercel deploy directly from this session if you give me a
+Vercel access token: create one at
+[vercel.com/account/tokens](https://vercel.com/account/tokens), then add it
+as an environment variable in this session's environment settings (the
+cloud environment menu in the session's title bar → Edit) named
+`VERCEL_TOKEN`. A new session picks it up — I'd use it non-interactively
+with the Vercel CLI to link and deploy this project, and still need you to
+create the Postgres database from Vercel's Storage tab first (that part
+isn't scriptable from a token alone). Otherwise, the four steps above are
+exactly what I'd run.
 
 ## Notes on the workout program data (`lib/program.ts`)
 
